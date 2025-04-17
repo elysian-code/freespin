@@ -4,12 +4,12 @@
 // components/SignUp.tsx
 import { useState } from 'react'
 import { useForm, SubmitHandler, Controller} from 'react-hook-form'
-import { supabase } from '../../SupabaseClient' 
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { signup } from '@/_actions/crud'
+import { redirect } from 'next/navigation'
 
 export type Inputs = {
   email: string
@@ -34,13 +34,16 @@ export default function SignUp() {
       return toast({description: 'password cannot be less than 6 characters!'})
     } 
 
-    const err = signup(data)
-
-    if (err) {
-      return toast({
-        variant: "destructive",
-        description: err  
-      })
+    try {
+      const res = await signup(data)
+      if (res.success) {
+        return toast({description: 'Account created successfully!', variant: 'default'})
+      
+      } else {
+        return toast({description: res.error, variant: 'destructive'})
+      }
+    } catch (error) {
+      toast({description: 'An error occurred during signup. Please try again.', variant: 'destructive'})
     }
      
   }

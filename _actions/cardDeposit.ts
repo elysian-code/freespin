@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       walletAddress,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error:', error.message);
     return res.status(500).json({ message: error.message });
   }

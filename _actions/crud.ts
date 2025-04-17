@@ -1,21 +1,15 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { Inputs } from '@/app/signup/page' 
+import { Inputs } from '@/app/signup/page'
 import { createClient } from '@/utils/supabase/server'
-import { LInputs } from '@/app/login/page'
-import { supabase } from '@/SupabaseClient'
-import { User } from '@supabase/supabase-js'
 import { AccountBalance, Investment } from '@/utils/database/types'
 import { Packages } from '@/lib/deposits'
+import { redirect } from 'next/navigation'
 
-
-export async function login(formData: LInputs) {
+export async function login(formData: any) {
   const supabase = createClient()
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
   const data = {
     email: formData.email.trim(),
     password: formData.password.trim(),
@@ -24,260 +18,227 @@ export async function login(formData: LInputs) {
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    return(error.message)
+    console.error('Login error:', error.message)
+    throw new Error(error.message)
   }
-  revalidatePath('/', 'layout')
+
+  revalidatePath('/')
   redirect('/home')
 }
 
 export async function signup(formData: Inputs) {
   const supabase = createClient()
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
+  let res = {
+    error: null,
+    data: null,
+  } as any
+
   const data = {
     email: formData.email.trim(),
     username: formData.username.trim(),
     phone_no: formData.phone_no.trim(),
     password: formData.password.trim(),
+    options: {
+      emailRedirectTo: 'https://localhost:3000/auth/confirm'
+    }
   }
 
-  const { data: {user}, error } = await supabase.auth.signUp(data)
-  
+  const { data: user, error } = await supabase.auth.signUp(data)
 
   if (error) {
-    return error.message
+    console.error('Signup error:', error.message)
+    return res.error = error.message
   }
 
-  console.log('user auth done')
-  const {error: message} = await supabase.from('users').insert([{
-    'id': user?.id,
-    'email': formData.email,
-    'name': formData.username,
-    'password_hash': formData.password
-  }])
+  console.log('User authentication successful')
 
-  if (message)
-    return console.error(message)
+  const { error: userInsertError } = await supabase.from('user_profiles').insert([
+    {
+      id: user?.user?.id,
+      phone_number: formData.phone_no,
+      email: formData.email,
+      full_name: formData.username,
+    },
+  ])
+
+  console.log('User signed up successfully')
+
+   await supabase
+    .from('wallets')
+    .insert([{ user_id: user?.user?.id, balance: 0 }])
+
+
   
-    
-  console.log('user signed up')
-   
-
-
-  const { error: balanceError } = await supabase
-        .from('account_balances')
-        .insert([{ user_id: user?.id }]);
-
-      if (balanceError) throw balanceError;
-
-
-      console.log('user balance created')
-  revalidatePath('/', 'layout')
-  redirect('/login')
-  
+  revalidatePath('/')
+  return { ...res, data: user?.user, success: true }
 }
 
-
 export async function getUser() {
-
   const supabase = createClient()
 
   try {
-    
-    const { data, error } = await supabase.auth.getUser()
-    if(error){
-      return error
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      console.error('Error fetching authenticated user:', authError.message)
+      throw new Error('Error fetching authenticated user')
     }
-    const { data: users, error: message } = await supabase
-  .from('users')
-  .select('*')
-  .eq('email', data.user?.email)
-  .limit(1)
-  if (message) return console.error(message)
 
-  console.log(users)
-  return users
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', authData.user?.email)
+      .limit(1)
 
-    // const rUser = fetchUser(data.user as any)
-    // rUser && console.log('current user data is: ',rUser)
-      // return rUser
+    if (userError) {
+      console.error('Error fetching user data:', userError.message)
+      throw new Error(userError.message)
+    }
 
+    console.log('Fetched user data:', users)
+    return users
   } catch (error) {
-    console.error(error)
+    console.error('Unexpected error fetching user:', error)
+    throw new Error('Failed to fetch user data')
   }
-
-  return 
-
 }
 
 export async function signOut() {
   const supabase = createClient()
-  const {error } = await supabase.auth.signOut()
-  if (error) return error
-  
+  const { error } = await supabase.auth.signOut()
+
+  if (error) {
+    console.error('Error signing out:', error.message)
+    throw error
+  }
+
+  console.log('User signed out successfully')
 }
 
-const fetchUser = async (user: User) => {
-  const supabase = createClient()
-  // createUser(user)
-  const { data, error } = await supabase
-  .from('users')
-  .select('*')
-  .eq('email', user.email)
-  .limit(1)
-  if (error)
-  return console.error(error)
-
-  // console.log('current user data is: ',data)
-  return data
-}
-
-// const createUser = async (formData: Inputs) => {
-//   const supabase = createClient()
-//  const {data, error} = await supabase.from('users').insert([{
-    
-//     'email': formData.email,
-//     'name': formData.username,
-//     'password_hash': formData.password
-//   }]).select()
-
-//   if (error)
-//     return console.error(error)
-  
-//     console.log(data)
-//     return data
-// }
-
-
- export const getBalance = async () => {
+export const getBalance = async () => {
   const supabase = createClient()
 
   try {
-    
-    const { data, error } = await supabase.auth.getUser()
-    if(error){
-      throw error
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      throw new Error('Error fetching authenticated user')
     }
-    const { data: balance, error: message } = await supabase
+
+    const { data: balance, error: balanceError } = await supabase
       .from('account_balances')
       .select('*')
-      .eq('user_id', data.user?.id)
+      .eq('user_id', authData.user?.id)
       .single()
 
-    if (message) return console.error(message)
+    if (balanceError) {
+      console.error('Error fetching balance:', balanceError.message)
+      throw new Error('Error fetching balance')
+    }
 
-    console.log(balance)
+    console.log('Fetched balance:', balance)
     return balance as AccountBalance
-
   } catch (error) {
-    console.error(error)
-    return null
+    console.error('Unexpected error fetching balance:', error)
+    throw new Error('Failed to fetch balance')
   }
-  
 }
- export const getInvestment = async () => {
+
+export const getInvestment = async () => {
   const supabase = createClient()
 
   try {
-    
-    const { data, error } = await supabase.auth.getUser()
-    if(error){
-      throw error
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      throw new Error('Error fetching authenticated user')
     }
-    const { data: balance, error: message } = await supabase
+
+    const { data: investments, error: investmentError } = await supabase
       .from('investments')
       .select('*')
-      .eq('user_id', data.user?.id)
-      .single()
+      .eq('user_id', authData.user?.id)
 
-    if (message) return console.error(message)
+    if (investmentError) {
+      console.error('Error fetching investments:', investmentError.message)
+      throw new Error('Error fetching investments')
+    }
 
-    
-    
-      
-      
-  const InvestmentPlan = Packages
-  .filter(packs => balance.some((investment: Investment) => packs.packgeName === investment?.investment_type)).map(packs => {
-    const investment = balance.find((investment: Investment) => packs.packgeName === investment?.investment_type); // Find matching item from array2
-    return { ...packs,
-       status: investment.status,
-        create_at: investment.create_at,
-        
-      }; // Merge and add the 'status' property
-  })
-    console.log(InvestmentPlan)
-    return InvestmentPlan
+    const investmentPlan = Packages.filter((pack) =>
+      investments.some(
+        (investment: Investment) => pack.packgeName === investment?.investment_type
+      )
+    ).map((pack) => {
+      const investment = investments.find(
+        (investment: Investment) => pack.packgeName === investment?.investment_type
+      )
+      return {
+        ...pack,
+        status: investment?.status,
+        create_at: investment?.create_at,
+      }
+    })
 
+    console.log('Fetched investment plan:', investmentPlan)
+    return investmentPlan
   } catch (error) {
-    console.error(error)
-    return null
+    console.error('Unexpected error fetching investments:', error)
+    throw new Error('Failed to fetch investments')
   }
-  
 }
 
-
 export const getWithdrawals = async () => {
-  
+  const supabase = createClient()
+
   try {
-    const { data, error: userError } = await supabase.auth.getUser()
-    if(userError){
-      throw userError
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      throw new Error('Error fetching authenticated user')
     }
-    // Get the last successful withdrawal
+
     const { data: lastWithdrawalData, error: lastWithdrawalError } = await supabase
       .from('transactions')
       .select('amount')
       .eq('transaction_type', 'withdrawal')
       .eq('status', 'completed')
-      .eq('user_id', data.user.id)
+      .eq('user_id', authData.user?.id)
       .order('created_at', { ascending: false })
-      .limit(1);
+      .limit(1)
 
-    if (lastWithdrawalError) throw lastWithdrawalError;
+    if (lastWithdrawalError) throw new Error('Error fetching last withdrawal data')
 
-    const lastWithdrawal: number = lastWithdrawalData[0]?.amount || 0;
+    const lastWithdrawal: number = lastWithdrawalData[0]?.amount || 0
 
-    // Get the total amount of successful withdrawals
     const { data: totalWithdrawalData, error: totalWithdrawalError } = await supabase
       .from('transactions')
       .select('amount')
       .eq('transaction_type', 'withdrawal')
       .eq('status', 'completed')
-      .eq('user_id', data.user.id);
+      .eq('user_id', authData.user?.id)
 
-    if (totalWithdrawalError) throw totalWithdrawalError;
+    if (totalWithdrawalError) throw new Error('Error fetching total withdrawal data')
 
-    const totalWithdrawal = totalWithdrawalData.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const totalWithdrawal = totalWithdrawalData.reduce(
+      (sum, transaction) => sum + transaction.amount,
+      0
+    )
 
-    // Get the count of pending withdrawals
     const { data: pendingWithdrawalData, error: pendingWithdrawalError } = await supabase
       .from('transactions')
       .select('id')
       .eq('transaction_type', 'withdrawal')
       .eq('status', 'pending')
-      .eq('user_id', data.user.id);
+      .eq('user_id', authData.user?.id)
 
-    if (pendingWithdrawalError) throw pendingWithdrawalError;
+    if (pendingWithdrawalError) throw new Error('Error fetching pending withdrawal data')
 
-    const pendingWithdrawals = pendingWithdrawalData.length;
+    const pendingWithdrawals = pendingWithdrawalData.length
 
     return {
       lastWithdrawal,
       totalWithdrawal,
       pendingWithdrawals,
-    };
+    }
   } catch (error) {
-    console.error('Error fetching withdrawal data:', error);
-    
+    console.error('Error fetching withdrawal data:', error)
+    throw new Error('Failed to fetch withdrawal data')
   }
-};
-
-// Usage Example
-// getWithdrawals('<USER_ID>')
-//   .then((data) => {
-//     console.log('Withdrawal Data:', data);
-//   })
-//   .catch((error) => {
-//     console.error('Error:', error);
-//   });
+}

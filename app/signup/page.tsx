@@ -1,15 +1,16 @@
 'use client'
 
-
-// components/SignUp.tsx
 import { useState } from 'react'
-import { useForm, SubmitHandler, Controller} from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { signup } from '@/_actions/crud'
-import { redirect } from 'next/navigation'
+import { ArrowLeft, Coins, Eye, EyeOff, Loader2 } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 
 export type Inputs = {
   email: string
@@ -19,211 +20,225 @@ export type Inputs = {
 }
 
 export default function SignUp() {
-  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-          defaultValues: {
-            email: '',
-            username: '',
-            phone_no: '',
-            password: '',
-          },
-        });
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const [showPassword, setShowPassword] = useState(false)
   const { toast } = useToast()
-  const onSubmit = async (data: Inputs) => {
-    if (data.password.length < 6 ){
-      return toast({description: 'password cannot be less than 6 characters!'})
-    } 
+  
+  const { 
+    control, 
+    handleSubmit, 
+    formState: { errors, isSubmitting },
+    getValues 
+  } = useForm<Inputs>({
+    defaultValues: {
+      email: '',
+      username: '',
+      phone_no: '',
+      password: '',
+    },
+  })
 
+  const onSubmit = async (data: Inputs) => {
     try {
       const res = await signup(data)
-      if (res.success) {
-        return toast({description: 'Account created successfully!', variant: 'default'})
       
+      if (res.success) {
+        toast({
+          title: "Success!",
+          description: 'Account created successfully! Please check your email to verify your account.',
+          variant: 'default'
+        })
+        router.push('/login')
       } else {
-        return toast({description: res.error, variant: 'destructive'})
+        toast({
+          title: "Error",
+          description: res.error || 'An error occurred during signup',
+          variant: 'destructive'
+        })
       }
     } catch (error) {
-      toast({description: 'An error occurred during signup. Please try again.', variant: 'destructive'})
+      console.error('Signup error:', error)
+      toast({
+        title: "Error",
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive'
+      })
     }
-     
   }
 
   return (
-    <div className="w-full max-w-sm mx-auto rounded-md border md:my-20">
-         <h2 className="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-gray-900">Please register below</h2>
-           <form className=" rounded px-8  pb-8 " onSubmit={handleSubmit(onSubmit)}>
-               <div className="mb-4">
-                   <label className="block text-gray-700 text-sm font-bold mb-2" >Email:</label>
-                   <Controller
-                  name="email" 
-        
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-16 items-center">
+          <Link href="/" className="flex items-center gap-2 font-bold text-xl">
+            <Coins className="h-6 w-6" />
+            <span>InvestHub</span>
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center p-4 md:p-8">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl">Create an account</CardTitle>
+            <CardDescription>Enter your details to get started</CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Controller
+                  name="email"
                   control={control}
-                  rules={{ required: 'Email is required' }}
-                  render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" {...field} />}
-                  />
-                  {errors.email && <p className="text-red-500 text-xs italic pt-2" >{errors.email.message}</p>}
+                  rules={{
+                    required: 'Email is required',
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: 'Please enter a valid email address'
+                    }
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      type="email"
+                      placeholder="you@example.com"
+                      className={errors.email ? "border-destructive" : ""}
+                      aria-describedby={errors.email ? "email-error" : undefined}
+                    />
+                  )}
+                />
+                {errors.email && (
+                  <p className="text-sm text-destructive" id="email-error">{errors.email.message}</p>
+                )}
               </div>
-  
-              <div className="mb-4 ">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" >Username:</label>
-                  <Controller
+
+              <div className="space-y-2">
+                <Label htmlFor="username">Full Name</Label>
+                <Controller
                   name="username"
                   control={control}
-                  rules={{ required: 'First Name is required' }}
-                  render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text"  {...field} />}
-                  />
-                  {errors.username && <p className="text-red-500 text-xs italic pt-2" >{errors.username.message}</p>}
+                  rules={{
+                    required: 'Full name is required',
+                    minLength: {
+                      value: 2,
+                      message: 'Name must be at least 2 characters'
+                    }
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      placeholder="John Doe"
+                      className={errors.username ? "border-destructive" : ""}
+                      aria-describedby={errors.username ? "username-error" : undefined}
+                    />
+                  )}
+                />
+                {errors.username && (
+                  <p className="text-sm text-destructive" id="username-error">{errors.username.message}</p>
+                )}
               </div>
-  
-               <div className="mb-4 ">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" >Phone Number:</label>
-                   <Controller
+
+              <div className="space-y-2">
+                <Label htmlFor="phone_no">Phone Number</Label>
+                <Controller
                   name="phone_no"
                   control={control}
-                  rules={{ required: 'Phone Number is required'}}
-                  render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="number" {...field} />}
-                  />
-                  {errors.phone_no && <p className="text-red-500 text-xs italic pt-2" >{errors.phone_no.message}</p>}
+                  rules={{
+                    required: 'Phone number is required',
+                    pattern: {
+                      value: /^\+?[1-9]\d{1,14}$/,
+                      message: 'Please enter a valid phone number'
+                    }
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      type="tel"
+                      placeholder="+1234567890"
+                      className={errors.phone_no ? "border-destructive" : ""}
+                      aria-describedby={errors.phone_no ? "phone-error" : undefined}
+                    />
+                  )}
+                />
+                {errors.phone_no && (
+                  <p className="text-sm text-destructive" id="phone-error">{errors.phone_no.message}</p>
+                )}
               </div>
-  
-              <div className="mb-4 ">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" >Password:</label>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
                   <Controller
-                  name="password"
-                  control={control}
-                  rules={{ required: 'Password is required' }}
-                  render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="password" {...field} />}
+                    name="password"
+                    control={control}
+                    rules={{
+                      required: 'Password is required',
+                      minLength: {
+                        value: 6,
+                        message: 'Password must be at least 6 characters'
+                      }
+                    }}
+                    render={({ field }) => (
+                      <Input
+                        {...field}
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        className={errors.password ? "border-destructive" : ""}
+                        aria-describedby={errors.password ? "password-error" : undefined}
+                      />
+                    )}
                   />
-                  {errors.password && <p className="text-red-500 text-xs italic pt-2" >{errors.password.message}</p>}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="sr-only">
+                      {showPassword ? "Hide password" : "Show password"}
+                    </span>
+                  </Button>
+                </div>
+                {errors.password && (
+                  <p className="text-sm text-destructive" id="password-error">{errors.password.message}</p>
+                )}
               </div>
-              
-  
+            </CardContent>
+            <CardFooter className="flex flex-col space-y-4">
               <Button 
-       
-                id='loginBtn'
+                type="submit" 
+                className="w-full" 
                 disabled={isSubmitting}
-                className="flex w-full justify-center rounded-md bg-indigo-600 px-3
-                py-1.5 text-sm font-semibold leading-6 text-white shadow-sm
-                hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
-                  focus-visible:outline-indigo-600" 
-                  type="submit">
-                    <div className={`${isSubmitting && 'w-5 h-5 animate-spin border-y-3 border-r-2 rounded-full border-cyan-100'}`}>{!isSubmitting && 'Sign up'}</div>
+              >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting ? "Creating account..." : "Create account"}
               </Button>
-              
-           </form>
-           <p className="text-center p-4">Already have an account? <Link className="text-center align-bottom italic text-blue-600" href={'/login'}>click here to login</Link></p>
-          
-       </div>
+              <div className="text-center text-sm">
+                Already have an account?{" "}
+                <Link 
+                  href="/login" 
+                  className="font-medium text-primary hover:underline underline-offset-4"
+                >
+                  Sign in
+                </Link>
+              </div>
+            </CardFooter>
+          </form>
+        </Card>
+      </main>
+      <footer className="border-t py-4">
+        <div className="container flex justify-between items-center">
+          <Link href="/" className="flex items-center gap-2 text-sm">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Home
+          </Link>
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} InvestHub
+          </p>
+        </div>
+      </footer>
+    </div>
   )
 }
-
-// export default function SignUpForm() {
-
-//   interface IData {
-//     email: string;
-//     firstName: string;
-//     lastName: string;
-//     password: string;
-//     password2: string;
-//   }
-      
-//     const { control, handleSubmit, formState: { errors } } = useForm({
-//       defaultValues: {
-//         email: '',
-//         firstName: '',
-//         lastName: '',
-//         password: '',
-//         password2: '',
-//       },
-//     });
-  
-//     const onSubmit = async (data: IData) => {
-      
-//       if (data.password !== data.password2) {
-//         return toast.error('invalid password confirmation')
-//       }
-//       const user = await _getUser(data.email)
-       
-//       if (user) return toast.error('user with this email already exist')  // Handle form submission logic here
-//       const details = {
-//         email: data.email,
-//         password: data.password,
-//         firstName: data.firstName,
-//         lastName: data.lastName
-//       }
-//         await _createUser(details)
-        
-//         await signIn('credentials',
-//           { email: data.email, password: data.password, callbackUrl: '/home' }
-//         )
-//       return toast.success('Account creation successful')
-//     };
-//     const {theme} = useTheme()
-//     return (
-//       <div className="w-full max-w-sm mx-auto rounded-md border-2 md: my-[4rem]">
-//         <h2 className="text-2xl text-bolder text-center p-10 ">sign up</h2>
-//           <form className=" rounded px-8  pb-8 mb-4" onSubmit={handleSubmit(onSubmit)}>
-//               <div className="mb-4">
-//                   <label className="block text-gray-700 text-sm font-bold mb-2" >Email:</label>
-//                   <Controller
-//                   name="email"
-//                   control={control}
-//                   rules={{ required: 'Email is required' }}
-//                   render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" {...field} />}
-//                   />
-//                   {errors.email && <p className="text-red-500 text-xs italic pt-2" >{errors.email.message}</p>}
-//               </div>
-  
-//               <div className="mb-4 ">
-//                   <label className="block text-gray-700 text-sm font-bold mb-2" >First Name:</label>
-//                   <Controller
-//                   name="firstName"
-//                   control={control}
-//                   rules={{ required: 'First Name is required' }}
-//                   render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" {...field} />}
-//                   />
-//                   {errors.firstName && <p className="text-red-500 text-xs italic pt-2" >{errors.firstName.message}</p>}
-//               </div>
-  
-//               <div className="mb-4 ">
-//                   <label className="block text-gray-700 text-sm font-bold mb-2" >Last Name:</label>
-//                   <Controller
-//                   name="lastName"
-//                   control={control}
-//                   rules={{ required: 'Last Name is required' }}
-//                   render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" {...field} />}
-//                   />
-//                   {errors.lastName && <p className="text-red-500 text-xs italic pt-2" >{errors.lastName.message}</p>}
-//               </div>
-  
-//               <div className="mb-4 ">
-//                   <label className="block text-gray-700 text-sm font-bold mb-2" >Password:</label>
-//                   <Controller
-//                   name="password"
-//                   control={control}
-//                   rules={{ required: 'Password is required' }}
-//                   render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="password" {...field} />}
-//                   />
-//                   {errors.password && <p className="text-red-500 text-xs italic pt-2" >{errors.password.message}</p>}
-//               </div>
-//               <div className="mb-4 ">
-//                   <label className="block text-gray-700 text-sm font-bold mb-2" >Confirm Password:</label>
-//                   <Controller
-//                   name="password2"
-//                   control={control}
-//                   rules={{ required: 'Password Confirmation is required' }}
-//                   render={({ field }) => <Input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="password" {...field} />}
-//                   />
-//                   {errors.password2 && <p className="text-red-500 text-xs italic pt-2" >{errors.password2.message}</p>}
-//               </div>
-  
-//               <Button variant={ theme === 'dark' ? 'secondary': 'default'} className="w-full" type="submit">Submit</Button>
-              
-//           </form>
-//           <p className="text-center p-4 italic">Already have an account? <Link className="text-sky-600" href={'/login'}>click here to login</Link></p>
-          
-//       </div>
-      
-//     );
-  
-//   }

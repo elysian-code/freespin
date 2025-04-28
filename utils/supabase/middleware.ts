@@ -2,8 +2,18 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const requestHeaders = new Headers(request.headers)
+  
+  // Ensure headers are consistent for Server Actions
+  if (forwardedHost?.includes('.app.github.dev')) {
+    requestHeaders.set('origin', `https://${forwardedHost}`)
+  }
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: {
+      headers: requestHeaders,
+    },
   })
 
   const supabase = createServerClient(
@@ -11,24 +21,34 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
+        get(name: string) {
+          return request.cookies.get(name)?.value
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
+        set(name: string, value: string, options: CookieOptions) {
+          supabaseResponse.cookies.set({
+            name,
+            value,
+            ...options,
           })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
+        },
+        remove(name: string, options: CookieOptions) {
+          supabaseResponse.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
         },
       },
     }
   )
 
-  // refreshing the auth token
+  // Refresh the auth token
   await supabase.auth.getUser()
+
+  // Ensure response headers are consistent
+  if (forwardedHost?.includes('.app.github.dev')) {
+    supabaseResponse.headers.set('origin', `https://${forwardedHost}`)
+  }
 
   return supabaseResponse
 }

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Coins,
@@ -38,13 +38,35 @@ export default function ProfilePage() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [profileData, setProfileData] = useState({
-    fullName: "John Doe",
-    email: "john.doe@example.com",
-    phone: "+1 (555) 123-4567",
-    address: "123 Main St, New York, NY 10001",
-    occupation: "Software Engineer",
-    bio: "Passionate investor with a focus on sustainable and ethical investments.",
+    fullName: "",
+    email: "",
+    phone: "",
+    address: "",
+    occupation: "",
+    bio: "",
   })
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch('/api/user/profile')
+        const data = await response.json()
+        if (data.data) {
+          setProfileData({
+            fullName: data.data.name || "",
+            email: data.data.email || "",
+            phone: data.data.phone_no || "",
+            address: data.data.address || "",
+            occupation: data.data.occupation || "",
+            bio: data.data.bio || "",
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error)
+      }
+    }
+    fetchProfile()
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -54,10 +76,30 @@ export default function ProfilePage() {
     }))
   }
 
-  const handleSave = () => {
-    // In a real app, you would call an API to update the user's profile
-    console.log("Saving profile:", profileData)
-    setIsEditing(false)
+  const handleSave = async () => {
+    try {
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: profileData.fullName,
+          email: profileData.email,
+          phone_no: profileData.phone,
+          address: profileData.address,
+          occupation: profileData.occupation,
+          bio: profileData.bio,
+        }),
+      })
+      const data = await response.json()
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      setIsEditing(false)
+    } catch (error) {
+      console.error('Failed to update profile:', error)
+    }
   }
 
   return (

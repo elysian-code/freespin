@@ -6,97 +6,148 @@ import { createClient } from '@/utils/supabase/server'
 import { AccountBalance, Investment } from '@/utils/database/types'
 import { Packages } from '@/lib/deposits'
 import { redirect } from 'next/navigation'
+import { getBaseUrl } from '@/utils/url'
 
-export async function login(formData: any) {
+export async function login(formData: { email: string; password: string }) {
   const supabase = createClient()
 
-  const data = {
-    email: formData.email.trim(),
-    password: formData.password.trim(),
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: formData.email.trim(),
+      password: formData.password.trim(),
+    })
+
+    if (error) {
+      return { 
+        error: error.message,
+        success: false 
+      }
+    }
+
+    revalidatePath('/')
+    return { 
+      data: data.user,
+      success: true 
+    }
+  } catch (error) {
+    console.error('Unexpected login error:', error)
+    return {
+      error: 'An unexpected error occurred during login',
+      success: false
+    }
   }
-
-  const { error } = await supabase.auth.signInWithPassword(data)
-
-  if (error) {
-    console.error('Login error:', error.message)
-    throw new Error(error.message)
-  }
-
-  revalidatePath('/')
-  redirect('/home')
 }
 
 export async function signup(formData: Inputs) {
   const supabase = createClient()
+  const baseUrl = getBaseUrl()
 
-  let res = {
-    error: null,
-    data: null,
-  } as any
+  try {
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('user_profiles')
+      .select('email')
+      .eq('email', formData.email.trim())
+      .single()
 
-  const data = {
-    email: formData.email.trim(),
-    username: formData.username.trim(),
-    phone_no: formData.phone_no.trim(),
-    password: formData.password.trim(),
-    options: {
-      emailRedirectTo: 'https://localhost:3000/auth/confirm'
+    if (existingUser) {
+      return {
+        error: 'An account with this email already exists',
+        success: false
+      }
+    }
+
+    // Sign up the user
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email.trim(),
+      password: formData.password.trim(),
+      options: {
+        data: {
+          full_name: formData.username.trim(),
+          phone_number: formData.phone_no.trim(),
+        },
+        emailRedirectTo: `${baseUrl}/auth/confirm`
+      }
+    })
+
+    if (error) {
+      console.error('Signup error:', error.message)
+      return {
+        error: error.message,
+        success: false
+      }
+    }
+
+    if (!data?.user?.id) {
+      return {
+        error: 'Failed to create user',
+        success: false
+      }
+    }
+
+    // Create user profile
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .insert([
+        {
+          id: data.user.id,
+          email: formData.email.trim(),
+          full_name: formData.username.trim(),
+          phone_number: formData.phone_no.trim(),
+        }
+      ])
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError.message)
+      // Delete the auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(data.user.id)
+      return {
+        error: 'Failed to create user profile',
+        success: false
+      }
+    }
+
+    // Initialize user wallet
+    const { error: walletError } = await supabase
+      .from('wallets')
+      .insert([
+        {
+          user_id: data.user.id,
+          balance: 0,
+          currency: 'USD'
+        }
+      ])
+
+    if (walletError) {
+      console.error('Wallet creation error:', walletError.message)
+      // Don't delete the user in this case, as the wallet can be created later
+    }
+
+    return {
+      data: data.user,
+      success: true,
+      message: 'Please check your email to verify your account.'
+    }
+  } catch (error) {
+    console.error('Unexpected error during signup:', error)
+    return {
+      error: 'An unexpected error occurred',
+      success: false
     }
   }
-
-  const { data: user, error } = await supabase.auth.signUp(data)
-
-  if (error) {
-    console.error('Signup error:', error.message)
-    return res.error = error.message
-  }
-
-  console.log('User authentication successful')
-
-  const { error: userInsertError } = await supabase.from('user_profiles').insert([
-    {
-      id: user?.user?.id,
-      phone_number: formData.phone_no,
-      email: formData.email,
-      full_name: formData.username,
-    },
-  ])
-
-  console.log('User signed up successfully')
-
-   await supabase
-    .from('wallets')
-    .insert([{ user_id: user?.user?.id, balance: 0 }])
-
-
-  
-  revalidatePath('/')
-  return { ...res, data: user?.user, success: true }
 }
 
 export async function getUser() {
-  const supabase = createClient()
-
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError) {
-      console.error('Error fetching authenticated user:', authError.message)
-      throw new Error('Error fetching authenticated user')
+    const response = await fetch('/api/user/profile')
+    const { data, error } = await response.json()
+    
+    if (error) {
+      console.error('Error fetching user data:', error)
+      throw new Error(error)
     }
 
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', authData.user?.email)
-      .limit(1)
-
-    if (userError) {
-      console.error('Error fetching user data:', userError.message)
-      throw new Error(userError.message)
-    }
-
-    console.log('Fetched user data:', users)
-    return users
+    return [data] // Returning in array to maintain backward compatibility
   } catch (error) {
     console.error('Unexpected error fetching user:', error)
     throw new Error('Failed to fetch user data')
@@ -240,5 +291,38 @@ export const getWithdrawals = async () => {
   } catch (error) {
     console.error('Error fetching withdrawal data:', error)
     throw new Error('Failed to fetch withdrawal data')
+  }
+}
+
+export async function sendMagicLink(email: string) {
+  const supabase = createClient()
+  const baseUrl = getBaseUrl()
+  
+  try {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${baseUrl}/auth/confirm`,
+        shouldCreateUser: true,
+      },
+    })
+
+    if (error) {
+      return { 
+        error: error.message,
+        success: false 
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Magic link has been sent to your email'
+    }
+  } catch (error) {
+    console.error('Magic link error:', error)
+    return {
+      error: 'Failed to send magic link',
+      success: false
+    }
   }
 }

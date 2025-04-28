@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,7 +12,7 @@ import {
   LandPlot,
   Shield,
 } from "lucide-react";
-
+import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Carousel,
@@ -23,7 +25,21 @@ import Autoplay from "embla-carousel-autoplay";
 import { useRef } from "react";
 
 export default function Home() {
-  const plugin = useRef(Autoplay({ delay: 2000, stopOnInteraction: false, }));
+  const router = useRouter();
+  const plugin = useRef(Autoplay({ delay: 2000, stopOnInteraction: false }));
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        router.replace('/dashboard');
+      }
+    };
+
+    checkAuth();
+  }, [router]);
 
   return (
     <div className='flex min-h-screen flex-col bg-gradient-to-b from-background to-background/80'>

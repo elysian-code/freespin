@@ -194,7 +194,7 @@ export const getBalance = async () => {
   }
 }
 
-export const getInvestment = async () => {
+export const getInvestment = async (): Promise<Investment[]> => {
   const supabase = createClient()
 
   try {
@@ -213,23 +213,7 @@ export const getInvestment = async () => {
       throw new Error('Error fetching investments')
     }
 
-    const investmentPlan = Packages.filter((pack) =>
-      investments.some(
-        (investment: Investment) => pack.packgeName === investment?.investment_type
-      )
-    ).map((pack) => {
-      const investment = investments.find(
-        (investment: Investment) => pack.packgeName === investment?.investment_type
-      )
-      return {
-        ...pack,
-        status: investment?.status,
-        create_at: investment?.create_at,
-      }
-    })
-
-    console.log('Fetched investment plan:', investmentPlan)
-    return investmentPlan
+    return investments || []
   } catch (error) {
     console.error('Unexpected error fetching investments:', error)
     throw new Error('Failed to fetch investments')
@@ -324,5 +308,45 @@ export async function sendMagicLink(email: string) {
       error: 'Failed to send magic link',
       success: false
     }
+  }
+}
+
+export async function updateAccountBalance(userId: string, balance: AccountBalance) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('account_balance')
+    .update(balance)
+    .eq('user_id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getUserTransactions() {
+  const supabase = createClient()
+  
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      throw new Error('Error fetching authenticated user')
+    }
+
+    const { data: transactions, error: transactionError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', authData.user?.id)
+      .order('created_at', { ascending: false })
+
+    if (transactionError) {
+      console.error('Error fetching transactions:', transactionError.message)
+      throw new Error('Error fetching transactions')
+    }
+
+    return transactions || []
+  } catch (error) {
+    console.error('Unexpected error fetching transactions:', error)
+    throw new Error('Failed to fetch transactions')
   }
 }

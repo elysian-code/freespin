@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   ArrowDown,
@@ -50,9 +50,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Progress } from "@/components/ui/progress"
+import { getBalance, getInvestment, getWithdrawals, updateAccountBalance } from "@/_actions/crud"
+import type { AccountBalance, Investment } from "@/utils/database/types"
 
 export default function WalletPage() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [balance, setBalance] = useState<AccountBalance | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [fundAmount, setFundAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("")
@@ -71,23 +75,64 @@ export default function WalletPage() {
     cvv: "",
   })
 
-  const handleFundWallet = () => {
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const balanceData = await getBalance()
+        setBalance(balanceData)
+      } catch (error) {
+        console.error('Error fetching wallet data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  const handleFundWallet = async () => {
     if (fundingStep < 3) {
       setFundingStep(fundingStep + 1)
     } else {
-      // In a real app, you would call an API to process the payment
-      console.log("Funding wallet with:", fundAmount, "using", paymentMethod)
-      setShowFundingSuccess(true)
+      try {
+        // In a real app, you would call an API to process the payment
+        console.log("Funding wallet with:", fundAmount, "using", paymentMethod)
+        const numAmount = Number.parseFloat(fundAmount)
+        if (balance && !isNaN(numAmount)) {
+          const newBalance = {
+            ...balance,
+            main_balance: (balance.main_balance || 0) + numAmount,
+            available_balance: (balance.available_balance || 0) + numAmount
+          }
+          await updateAccountBalance(balance.user_id, newBalance)
+          setBalance(newBalance)
+        }
+        setShowFundingSuccess(true)
+      } catch (error) {
+        console.error('Error funding wallet:', error)
+      }
     }
   }
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (withdrawStep < 3) {
       setWithdrawStep(withdrawStep + 1)
     } else {
-      // In a real app, you would call an API to process the withdrawal
-      console.log("Withdrawing:", withdrawAmount)
-      setShowWithdrawSuccess(true)
+      try {
+        const numAmount = Number.parseFloat(withdrawAmount)
+        if (balance && !isNaN(numAmount)) {
+          const newBalance = {
+            ...balance,
+            main_balance: (balance.main_balance || 0) - numAmount,
+            available_balance: (balance.available_balance || 0) - numAmount
+          }
+          await updateAccountBalance(balance.user_id, newBalance)
+          setBalance(newBalance)
+        }
+        setShowWithdrawSuccess(true)
+      } catch (error) {
+        console.error('Error processing withdrawal:', error)
+      }
     }
   }
 
@@ -284,10 +329,9 @@ export default function WalletPage() {
                               {fundingStep === 1 ? "Amount" : fundingStep === 2 ? "Payment Method" : "Confirm"}
                             </div>
                           </div>
-                          <Progress
-                            value={fundingStep * 33.33}
-                            className="h-2 bg-emerald-100"
-                            indicatorClassName="bg-emerald-600"
+                          <Progress 
+                            value={fundingStep * 33.33} 
+                            className="h-2"
                           />
                         </div>
 
@@ -602,10 +646,9 @@ export default function WalletPage() {
                               {withdrawStep === 1 ? "Amount" : withdrawStep === 2 ? "Withdrawal Method" : "Confirm"}
                             </div>
                           </div>
-                          <Progress
+                          <Progress 
                             value={withdrawStep * 33.33}
-                            className="h-2 bg-emerald-100"
-                            indicatorClassName="bg-emerald-600"
+                            className="h-2"
                           />
                         </div>
 

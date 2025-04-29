@@ -1,23 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import {
-  ArrowDown,
-  ArrowUp,
-  Coins,
-  CreditCard,
-  Download,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  PieChart,
-  Search,
-  Settings,
-  SlidersHorizontal,
-  User,
-  Wallet,
-} from "lucide-react"
+import { ArrowDown, ArrowUp, Coins, CreditCard, Download, LayoutDashboard, LogOut, Menu, PieChart, Search, Settings, SlidersHorizontal, Upload, User, Wallet, Plus } from "lucide-react"
+import { getUserTransactions } from "@/_actions/crud"
+import type { Transaction } from "@/utils/database/types"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +22,23 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 export default function TransactionsPage() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const transactionsData = await getUserTransactions()
+        setTransactions(transactionsData || [])
+      } catch (error) {
+        console.error('Error fetching transactions:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchData()
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -168,70 +172,18 @@ export default function TransactionsPage() {
                 <p className="text-muted-foreground">View and manage your transaction history</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="gap-1">
-                  <Download className="h-4 w-4" />
-                  Export
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="gap-1">
-                      <SlidersHorizontal className="h-4 w-4" />
-                      Filter
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[200px]">
-                    <DropdownMenuLabel>Filter By</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <div className="p-2">
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Transaction Type</p>
-                        <Select defaultValue="all">
-                          <SelectTrigger>
-                            <SelectValue placeholder="All Types" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Types</SelectItem>
-                            <SelectItem value="deposit">Deposits</SelectItem>
-                            <SelectItem value="withdrawal">Withdrawals</SelectItem>
-                            <SelectItem value="investment">Investments</SelectItem>
-                            <SelectItem value="return">Returns</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 mt-4">
-                        <p className="text-sm font-medium">Date Range</p>
-                        <Select defaultValue="all-time">
-                          <SelectTrigger>
-                            <SelectValue placeholder="All Time" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all-time">All Time</SelectItem>
-                            <SelectItem value="last-7">Last 7 Days</SelectItem>
-                            <SelectItem value="last-30">Last 30 Days</SelectItem>
-                            <SelectItem value="last-90">Last 90 Days</SelectItem>
-                            <SelectItem value="custom">Custom Range</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 mt-4">
-                        <p className="text-sm font-medium">Amount</p>
-                        <Select defaultValue="any">
-                          <SelectTrigger>
-                            <SelectValue placeholder="Any Amount" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="any">Any Amount</SelectItem>
-                            <SelectItem value="under-1000">Under $1,000</SelectItem>
-                            <SelectItem value="1000-5000">$1,000 - $5,000</SelectItem>
-                            <SelectItem value="5000-10000">$5,000 - $10,000</SelectItem>
-                            <SelectItem value="over-10000">Over $10,000</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button className="w-full mt-4">Apply Filters</Button>
-                    </div>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Link href="/wallet">
+                  <Button className="gap-1 bg-emerald-600 hover:bg-emerald-700">
+                    <Upload className="h-4 w-4" />
+                    Fund Wallet
+                  </Button>
+                </Link>
+                <Link href="/wallet">
+                  <Button variant="outline" className="gap-1">
+                    <Download className="h-4 w-4" />
+                    Withdraw
+                  </Button>
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -254,147 +206,67 @@ export default function TransactionsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Transaction History</CardTitle>
-                <CardDescription>A record of all your deposits, withdrawals, and investments</CardDescription>
+                <CardDescription>A detailed list of all your wallet transactions</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-green-500/20 p-2">
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Wallet Funding</h3>
-                          <p className="text-sm text-muted-foreground">Apr 3, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">+$10,000.00</p>
-                        <p className="text-sm text-muted-foreground">Credit Card</p>
-                      </div>
-                    </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>
                   </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-primary/20 p-2">
-                          <ArrowUp className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Investment Purchase</h3>
-                          <p className="text-sm text-muted-foreground">Apr 2, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-primary">-$5,000.00</p>
-                        <p className="text-sm text-muted-foreground">Farm Stock</p>
-                      </div>
-                    </div>
+                ) : transactions.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No transactions found</p>
+                    <Button className="mt-4 gap-1" asChild>
+                      <Link href="/wallet">
+                        <Plus className="h-4 w-4" />
+                        Make Your First Transaction
+                      </Link>
+                    </Button>
                   </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-green-500/20 p-2">
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Wallet Funding</h3>
-                          <p className="text-sm text-muted-foreground">Mar 28, 2025</p>
+                ) : (
+                  <div className="space-y-4">
+                    {transactions.filter(t => t !== null).map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors"
+                      >
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex items-center gap-4">
+                            <div className={`rounded-full p-2 ${
+                              transaction.transaction_type === 'deposit' 
+                                ? 'bg-green-500/20' 
+                                : 'bg-emerald-500/20'
+                            }`}>
+                              {transaction.transaction_type === 'deposit' ? (
+                                <ArrowDown className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <ArrowUp className="h-4 w-4 text-emerald-500" />
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="font-medium">
+                                {transaction.transaction_type === 'deposit' ? 'Wallet Funding' : 'Withdrawal'}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(transaction.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`font-medium ${
+                              transaction.transaction_type === 'deposit'
+                                ? 'text-green-600'
+                                : 'text-emerald-600'
+                            }`}>
+                              {transaction.transaction_type === 'deposit' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{transaction.status}</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">+$25,000.00</p>
-                        <p className="text-sm text-muted-foreground">Bank Transfer</p>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-primary/20 p-2">
-                          <ArrowUp className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Investment Purchase</h3>
-                          <p className="text-sm text-muted-foreground">Mar 25, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-primary">-$10,000.00</p>
-                        <p className="text-sm text-muted-foreground">Real Estate</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-primary/20 p-2">
-                          <ArrowUp className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Investment Purchase</h3>
-                          <p className="text-sm text-muted-foreground">Mar 20, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-primary">-$3,000.00</p>
-                        <p className="text-sm text-muted-foreground">Cryptocurrency</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-green-500/20 p-2">
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Investment Return</h3>
-                          <p className="text-sm text-muted-foreground">Mar 15, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">+$750.00</p>
-                        <p className="text-sm text-muted-foreground">Farm Stock Dividend</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-green-500/20 p-2">
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Investment Return</h3>
-                          <p className="text-sm text-muted-foreground">Mar 10, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">+$400.00</p>
-                        <p className="text-sm text-muted-foreground">Real Estate Rental Income</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="rounded-full bg-green-500/20 p-2">
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Wallet Funding</h3>
-                          <p className="text-sm text-muted-foreground">Mar 5, 2025</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">+$15,000.00</p>
-                        <p className="text-sm text-muted-foreground">Bank Transfer</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>

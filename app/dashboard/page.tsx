@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   BarChart3,
@@ -17,6 +17,8 @@ import {
   User,
   Wallet,
 } from "lucide-react"
+import { getBalance, getInvestment, getWithdrawals } from "@/_actions/crud"
+import { AccountBalance, Investment } from "@/utils/database/types"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,6 +35,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function DashboardPage() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [balance, setBalance] = useState<AccountBalance | null>(null)
+  const [investments, setInvestments] = useState<Investment[] | null>(null)
+  const [withdrawals, setWithdrawals] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const balanceData = await getBalance()
+        const investmentsData = await getInvestment()
+        const withdrawalsData = await getWithdrawals()
+
+        setBalance(balanceData)
+        setInvestments(investmentsData)
+        setWithdrawals(withdrawalsData)
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -167,8 +193,21 @@ export default function DashboardPage() {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">$45,231.89</div>
-                  <p className="text-xs text-muted-foreground">+20.1% from last month</p>
+                  {isLoading ? (
+                    <div className="animate-pulse">
+                      <div className="h-7 w-24 bg-muted rounded"></div>
+                      <div className="h-4 w-32 bg-muted rounded mt-2"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold">
+                        ${balance?.main_balance?.toFixed(2) || '0.00'}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Available for investments and withdrawals
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -177,8 +216,21 @@ export default function DashboardPage() {
                   <PieChart className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">$12,234.59</div>
-                  <p className="text-xs text-muted-foreground">+4.3% from last month</p>
+                  {isLoading ? (
+                    <div className="animate-pulse">
+                      <div className="h-7 w-24 bg-muted rounded"></div>
+                      <div className="h-4 w-32 bg-muted rounded mt-2"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold">
+                        ${balance?.investment_balance?.toFixed(2) || '0.00'}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Total value of active investments
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -187,8 +239,21 @@ export default function DashboardPage() {
                   <Wallet className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">$32,997.30</div>
-                  <p className="text-xs text-muted-foreground">+10.2% from last month</p>
+                  {isLoading ? (
+                    <div className="animate-pulse">
+                      <div className="h-7 w-24 bg-muted rounded"></div>
+                      <div className="h-4 w-32 bg-muted rounded mt-2"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold">
+                        ${balance?.available_balance?.toFixed(2) || '0.00'}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Balance available for withdrawal
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -197,8 +262,21 @@ export default function DashboardPage() {
                   <BarChart3 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">7</div>
-                  <p className="text-xs text-muted-foreground">+2 from last month</p>
+                  {isLoading ? (
+                    <div className="animate-pulse">
+                      <div className="h-7 w-24 bg-muted rounded"></div>
+                      <div className="h-4 w-32 bg-muted rounded mt-2"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold">
+                        {investments?.filter(inv => inv?.status === 'active')?.length || 0}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Current active investment plans
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </div>

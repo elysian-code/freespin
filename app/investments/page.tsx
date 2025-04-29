@@ -20,8 +20,11 @@ import {
   DollarSign,
   Plus
 } from "lucide-react"
-import { getBalance, getInvestment } from "@/_actions/crud"
+import { getBalance, getInvestments, signOut } from "@/_actions/crud"
 import type { Investment, AccountBalance } from "@/utils/database/types"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
+import { createClient } from "@/utils/supabase/client"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,38 +43,83 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 
 export default function InvestmentsPage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [balance, setBalance] = useState<AccountBalance | null>(null)
   const [investments, setInvestments] = useState<Investment[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
 
   useEffect(() => {
     async function fetchData() {
       try {
         const [balanceData, investmentsData] = await Promise.all([
           getBalance(),
-          getInvestment()
+          getInvestments()
         ])
         setBalance(balanceData)
         setInvestments(investmentsData || [])
       } catch (error) {
         console.error('Error fetching investment data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load investment data",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('investment_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'investments'
+      }, (payload) => {
+        if (payload.new) {
+          setInvestments(prev => {
+            const newInvestment = payload.new as Investment
+            if (!newInvestment) return prev
+            const index = prev.findIndex(inv => inv?.id === newInvestment.id)
+            if (index >= 0) {
+              const newInvestments = [...prev]
+              newInvestments[index] = newInvestment
+              return newInvestments
+            }
+            return [newInvestment, ...prev]
+          })
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'account_balances'
+      }, (payload) => {
+        if (payload.new) {
+          setBalance(payload.new as AccountBalance)
+        }
+      })
+      .subscribe()
+
     fetchData()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [])
 
   const calculateInvestmentStats = () => {
     if (!investments.length) return { totalInvested: 0, totalReturns: 0, activeCount: 0, returnRate: 0 }
     
     const activeInvestments = investments.filter(inv => inv?.status === 'active' && inv !== null)
-    const totalInvested = activeInvestments.reduce((sum, inv) => sum + (inv?.amount ?? 0), 0)
+    const totalInvested = activeInvestments.reduce((sum, inv) => sum + (inv?.amount_invested ?? 0), 0)
     const totalReturns = activeInvestments.reduce((sum, inv) => {
-      const returns = (inv?.amount ?? 0) * 0.15 // Example: 15% return rate
+      const returns = (inv?.amount_invested ?? 0) * 0.15 // Example: 15% return rate
       return sum + returns
     }, 0)
     
@@ -84,6 +132,20 @@ export default function InvestmentsPage() {
   }
 
   const stats = calculateInvestmentStats()
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -198,10 +260,13 @@ export default function InvestmentsPage() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/">
+                  <button
+                    className="w-full flex items-center"
+                    onClick={handleLogout}
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
-                  </Link>
+                  </button>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -358,13 +423,13 @@ export default function InvestmentsPage() {
                                  investment.investment_type.slice(1).replace('_', ' ')}
                               </h3>
                               <p className="text-sm text-muted-foreground">
-                                Invested on {new Date(investment.created_at).toLocaleDateString()}
+                                Invested on {new Date(investment.invested_on).toLocaleDateString()}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <p className="font-medium">
-                              ${investment.amount.toFixed(2)}
+                              ${investment.amount_invested.toFixed(2)}
                             </p>
                             <p className={`text-sm ${
                               investment.status === 'active' 
@@ -372,6 +437,9 @@ export default function InvestmentsPage() {
                                 : 'text-muted-foreground'
                             }`}>
                               {investment.status}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Expected Payout: ${investment.expected_payout.toFixed(2)}
                             </p>
                           </div>
                         </div>
@@ -381,7 +449,7 @@ export default function InvestmentsPage() {
                               <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Returns</span>
                                 <span className="text-emerald-600">
-                                  +${(investment.amount * 0.15).toFixed(2)} (15%)
+                                  +${(investment.amount_invested * 0.15).toFixed(2)} (15%)
                                 </span>
                               </div>
                               <Progress

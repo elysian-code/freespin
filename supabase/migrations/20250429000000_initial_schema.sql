@@ -38,11 +38,13 @@ CREATE TABLE funds (
 CREATE TABLE investments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    amount DECIMAL(15,2) NOT NULL,
+    amount_invested DECIMAL(15,2) NOT NULL,
+    expected_payout DECIMAL(15,2) NOT NULL,
     investment_type VARCHAR(50) NOT NULL,
-    status VARCHAR(20) CHECK (status IN ('active', 'completed', 'failed')),
+    status VARCHAR(20) CHECK (status IN ('active', 'completed', 'cancel')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CHECK (investment_type IN ('farm_stocks', 'real_estate', 'cryptocurrency'))
 );
 
 -- User settings table

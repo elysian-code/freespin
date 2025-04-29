@@ -23,6 +23,8 @@ import {
   Wallet,
   Coins,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,10 +52,14 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Progress } from "@/components/ui/progress"
-import { getBalance, getInvestment, getWithdrawals, updateAccountBalance } from "@/_actions/crud"
+import { getBalance, getInvestments, getWithdrawals, updateAccountBalance, signOut, getUserTransactions } from "@/_actions/crud"
 import type { AccountBalance, Investment } from "@/utils/database/types"
+import { createClient } from "@/utils/supabase/client"
+import type { Transaction } from "@/utils/database/types"
 
 export default function WalletPage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [balance, setBalance] = useState<AccountBalance | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -74,20 +80,56 @@ export default function WalletPage() {
     expiryDate: "",
     cvv: "",
   })
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const supabase = createClient()
 
   useEffect(() => {
     async function fetchData() {
       try {
         const balanceData = await getBalance()
+        const transactionData = await getUserTransactions()
         setBalance(balanceData)
+        setTransactions(transactionData)
       } catch (error) {
         console.error('Error fetching wallet data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load wallet data",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('wallet_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'account_balances'
+      }, (payload) => {
+        if (payload.new) {
+          setBalance(payload.new as any)
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'transactions'
+      }, (payload) => {
+        if (payload.new) {
+          setTransactions(prev => [payload.new as Transaction, ...prev])
+        }
+      })
+      .subscribe()
+
     fetchData()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [])
 
   const handleFundWallet = async () => {
@@ -171,6 +213,20 @@ export default function WalletPage() {
     const numAmount = Number.parseFloat(amount) || 0
     return (numAmount * 0.015).toFixed(2) // 1.5% fee
   }
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-background to-background/80">
@@ -289,10 +345,13 @@ export default function WalletPage() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/">
+                  <button
+                    className="w-full flex items-center"
+                    onClick={handleLogout}
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
-                  </Link>
+                  </button>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -943,91 +1002,46 @@ export default function WalletPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors">
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center gap-4">
-                            <div className="rounded-full bg-green-500/20 p-2">
-                              <ArrowDown className="h-4 w-4 text-green-500" />
+                      {transactions.map((transaction) => transaction && (
+                        <div
+                          key={transaction.id}
+                          className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors"
+                        >
+                          <div className="flex items-center justify-between p-4">
+                            <div className="flex items-center gap-4">
+                              <div className={`rounded-full p-2 ${
+                                transaction.transaction_type === 'deposit' 
+                                  ? 'bg-green-500/20' 
+                                  : 'bg-emerald-500/20'
+                              }`}>
+                                {transaction.transaction_type === 'deposit' ? (
+                                  <ArrowDown className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <ArrowUp className="h-4 w-4 text-emerald-500" />
+                                )}
+                              </div>
+                              <div>
+                                <h3 className="font-medium">
+                                  {transaction.transaction_type === 'deposit' ? 'Wallet Funding' : 'Withdrawal'}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(transaction.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-medium">Wallet Funding</h3>
-                              <p className="text-sm text-muted-foreground">Apr 3, 2025</p>
+                            <div className="text-right">
+                              <p className={`font-medium ${
+                                transaction.transaction_type === 'deposit'
+                                  ? 'text-green-600'
+                                  : 'text-emerald-600'
+                              }`}>
+                                {transaction.transaction_type === 'deposit' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{transaction.status}</p>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-green-600">+$10,000.00</p>
-                            <p className="text-sm text-muted-foreground">Credit Card</p>
                           </div>
                         </div>
-                      </div>
-                      <div className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors">
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center gap-4">
-                            <div className="rounded-full bg-emerald-500/20 p-2">
-                              <ArrowUp className="h-4 w-4 text-emerald-500" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Investment Purchase</h3>
-                              <p className="text-sm text-muted-foreground">Apr 2, 2025</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-emerald-600">-$5,000.00</p>
-                            <p className="text-sm text-muted-foreground">Farm Stock</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors">
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center gap-4">
-                            <div className="rounded-full bg-green-500/20 p-2">
-                              <ArrowDown className="h-4 w-4 text-green-500" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Wallet Funding</h3>
-                              <p className="text-sm text-muted-foreground">Mar 28, 2025</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-green-600">+$25,000.00</p>
-                            <p className="text-sm text-muted-foreground">Bank Transfer</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors">
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center gap-4">
-                            <div className="rounded-full bg-emerald-500/20 p-2">
-                              <ArrowUp className="h-4 w-4 text-emerald-500" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Investment Purchase</h3>
-                              <p className="text-sm text-muted-foreground">Mar 25, 2025</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-emerald-600">-$10,000.00</p>
-                            <p className="text-sm text-muted-foreground">Real Estate</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors">
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center gap-4">
-                            <div className="rounded-full bg-emerald-500/20 p-2">
-                              <ArrowUp className="h-4 w-4 text-emerald-500" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Investment Purchase</h3>
-                              <p className="text-sm text-muted-foreground">Mar 20, 2025</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-emerald-600">-$3,000.00</p>
-                            <p className="text-sm text-muted-foreground">Cryptocurrency</p>
-                          </div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </CardContent>
                   <CardFooter>

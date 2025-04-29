@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowDown, ArrowUp, Coins, CreditCard, Download, LayoutDashboard, LogOut, Menu, PieChart, Search, Settings, SlidersHorizontal, Upload, User, Wallet, Plus } from "lucide-react"
-import { getUserTransactions } from "@/_actions/crud"
+import { getUserTransactions, signOut } from "@/_actions/crud"
 import type { Transaction } from "@/utils/database/types"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
+import { createClient } from "@/utils/supabase/client"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,9 +24,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 export default function TransactionsPage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
 
   useEffect(() => {
     async function fetchData() {
@@ -32,13 +38,50 @@ export default function TransactionsPage() {
         setTransactions(transactionsData || [])
       } catch (error) {
         console.error('Error fetching transactions:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load transactions",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
-    
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('transaction_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'transactions'
+      }, (payload) => {
+        if (payload.new) {
+          setTransactions(prev => [payload.new as Transaction, ...prev])
+        }
+      })
+      .subscribe()
+
     fetchData()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [])
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -153,10 +196,13 @@ export default function TransactionsPage() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/">
+                  <button
+                    className="w-full flex items-center"
+                    onClick={handleLogout}
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
-                  </Link>
+                  </button>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

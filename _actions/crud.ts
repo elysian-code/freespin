@@ -166,56 +166,43 @@ export async function signOut() {
   console.log('User signed out successfully')
 }
 
-export const getBalance = async () => {
+export const getBalance = async (): Promise<AccountBalance | null> => {
   const supabase = createClient()
 
   try {
     const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError) {
-      throw new Error('Error fetching authenticated user')
-    }
+    if (authError) throw new Error('Error fetching authenticated user')
 
     const { data: balance, error: balanceError } = await supabase
-      .from('account_balances')
+      .from('wallets')
       .select('*')
       .eq('user_id', authData.user?.id)
       .single()
 
-    if (balanceError) {
-      console.error('Error fetching balance:', balanceError.message)
-      throw new Error('Error fetching balance')
-    }
-
-    console.log('Fetched balance:', balance)
-    return balance as AccountBalance
+    if (balanceError) throw balanceError
+    return balance
   } catch (error) {
-    console.error('Unexpected error fetching balance:', error)
+    console.error('Error fetching balance:', error)
     throw new Error('Failed to fetch balance')
   }
 }
 
-export const getInvestment = async (): Promise<Investment[]> => {
+export const getInvestments = async (): Promise<Investment[]> => {
   const supabase = createClient()
 
   try {
     const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError) {
-      throw new Error('Error fetching authenticated user')
-    }
+    if (authError) throw new Error('Error fetching authenticated user')
 
     const { data: investments, error: investmentError } = await supabase
-      .from('investments')
+      .from('user_investments')
       .select('*')
       .eq('user_id', authData.user?.id)
 
-    if (investmentError) {
-      console.error('Error fetching investments:', investmentError.message)
-      throw new Error('Error fetching investments')
-    }
-
+    if (investmentError) throw investmentError
     return investments || []
   } catch (error) {
-    console.error('Unexpected error fetching investments:', error)
+    console.error('Error fetching investments:', error)
     throw new Error('Failed to fetch investments')
   }
 }
@@ -230,9 +217,9 @@ export const getWithdrawals = async () => {
     }
 
     const { data: lastWithdrawalData, error: lastWithdrawalError } = await supabase
-      .from('transactions')
+      .from('wallet_transactions')
       .select('amount')
-      .eq('transaction_type', 'withdrawal')
+      .eq('type', 'withdrawal')
       .eq('status', 'completed')
       .eq('user_id', authData.user?.id)
       .order('created_at', { ascending: false })
@@ -243,9 +230,9 @@ export const getWithdrawals = async () => {
     const lastWithdrawal: number = lastWithdrawalData[0]?.amount || 0
 
     const { data: totalWithdrawalData, error: totalWithdrawalError } = await supabase
-      .from('transactions')
+      .from('wallet_transactions')
       .select('amount')
-      .eq('transaction_type', 'withdrawal')
+      .eq('type', 'withdrawal')
       .eq('status', 'completed')
       .eq('user_id', authData.user?.id)
 
@@ -257,9 +244,9 @@ export const getWithdrawals = async () => {
     )
 
     const { data: pendingWithdrawalData, error: pendingWithdrawalError } = await supabase
-      .from('transactions')
+      .from('wallet_transactions')
       .select('id')
-      .eq('transaction_type', 'withdrawal')
+      .eq('type', 'withdrawal')
       .eq('status', 'pending')
       .eq('user_id', authData.user?.id)
 
@@ -311,42 +298,41 @@ export async function sendMagicLink(email: string) {
   }
 }
 
-export async function updateAccountBalance(userId: string, balance: AccountBalance) {
+export const updateAccountBalance = async (userId: string, updates: Partial<AccountBalance>) => {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('account_balance')
-    .update(balance)
-    .eq('user_id', userId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
+  try {
+    const { data, error } = await supabase
+      .from('wallets')
+      .update(updates)
+      .eq('user_id', userId)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('Error updating balance:', error)
+    throw new Error('Failed to update balance')
+  }
 }
 
-export async function getUserTransactions() {
+export const getUserTransactions = async () => {
   const supabase = createClient()
   
   try {
     const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError) {
-      throw new Error('Error fetching authenticated user')
-    }
+    if (authError) throw new Error('Error fetching authenticated user')
 
-    const { data: transactions, error: transactionError } = await supabase
-      .from('transactions')
+    const { data: transactions, error } = await supabase
+      .from('wallet_transactions')
       .select('*')
       .eq('user_id', authData.user?.id)
       .order('created_at', { ascending: false })
-
-    if (transactionError) {
-      console.error('Error fetching transactions:', transactionError.message)
-      throw new Error('Error fetching transactions')
-    }
-
+  
+    if (error) throw error
     return transactions || []
   } catch (error) {
-    console.error('Unexpected error fetching transactions:', error)
+    console.error('Error fetching transactions:', error)
     throw new Error('Failed to fetch transactions')
   }
 }

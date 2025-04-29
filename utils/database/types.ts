@@ -32,10 +32,11 @@ export type User = {
   export type Investment = {
     id: string;                 // UUID of the investment entry
     user_id: string;            // UUID referencing the user
-    amount: number;             // Investment amount
+    amount_invested: number;             // Investment amount
     investment_type: string;    // Type of investment (e.g., crypto, stock)
-    status: 'active' | 'completed' | 'failed';  // Status of the investment
-    created_at: string;         // Timestamp of the investment creation
+    expected_payout: number;   // Expected return on investment
+    status: 'active' | 'completed' | 'cancel';  // Status of the investment
+    invested_on: string;         // Timestamp of the investment creation
     updated_at: string;         // Timestamp of the last update
   } | null;
   
